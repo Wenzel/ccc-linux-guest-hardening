@@ -121,15 +121,22 @@ function run()
 	popd  > /dev/null
 
 	echo "Launching kAFL with workdir ${WORK_DIR}.."
-	kafl_fuzz.py \
+	docker run \
+		-ti --rm --device=/dev/kvm \
+		-v $BIOS_IMAGE:/mnt/bios \
+		-v $INITRD_IMAGE:/mnt/initrd \
+		-v $TARGET_BIN:/mnt/kernel \
+		-v $WORK_DIR:/mnt/workdir \
+		-v $SHARE_DIR:/mnt/sharedir \
+		kafl \
 		--memory $MEMSIZE \
 		-ip0 $ip0_a-$ip0_b \
 		-ip1 $ip1_a-$ip1_b \
-		--bios $BIOS_IMAGE \
-		--initrd $INITRD_IMAGE \
-		--kernel $TARGET_BIN \
-		--work-dir $WORK_DIR \
-		--sharedir $SHARE_DIR \
+		--bios /mnt/bios \
+		--initrd /mnt/initrd \
+		--kernel /mnt/kernel \
+		--work-dir /mnt/workdir \
+		--sharedir /mnt/sharedir \
 		$KAFL_OPTS $*
 }
 
