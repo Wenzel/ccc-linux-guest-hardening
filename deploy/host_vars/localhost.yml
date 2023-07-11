@@ -1,2 +1,6 @@
 # force default local connection plugin for localhost instead of ssh
 ansible_connection: local
+
+# guest-next fuzzing
+guest_url: https://github.com/intel/tdx
+guest_revision: guest-next
