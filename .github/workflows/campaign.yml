@@ -122,7 +122,7 @@ jobs:
         with:
           python-version: '3.9.13'
     
-      - run: pip install pyyaml
+      - run: pip install pyyaml==6.0.1
 
       - name: Create harness dir
         run: |
@@ -166,8 +166,7 @@ jobs:
           # dump kafl_config
           with open('kafl.yml', 'w') as f:
             pprint(matrix, indent=4)
-            # yaml.dump(f, matrix['kernel_config'])
-            json.dump(matrix['kafl_config'], f)
+            yaml.dump(matrix['kernel_config'], f)
         shell: python
         working-directory: ${{ env.harness_dir }}
 
