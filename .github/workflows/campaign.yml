@@ -77,7 +77,6 @@ jobs:
           path: build.tar.gz
 
   build_matrix:
-    needs: [build_project]
     runs-on: ubuntu-latest
     outputs:
       matrix: ${{ steps.set-matrix.outputs.matrix }}
