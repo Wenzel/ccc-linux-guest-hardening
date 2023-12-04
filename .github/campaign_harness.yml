@@ -1,0 +1,91 @@
+harnesses:
+  # boot_harnesses
+  - name: BOOT_POST_TRAP
+  - name: BOOT_EARLYBOOT
+  - name: BOOT_DOINITCALLS_PCI
+  - name: BOOT_DOINITCALLS_VIRTIO
+  - name: BOOT_DOINITCALLS_ACPI
+  - name: BOOT_FULL_BOOT
+  - name: BOOT_REST_INIT
+  - name: BOOT_VIRTIO_BLK_PROBE
+  - name: BOOT_START_KERNEL
+  - name: BOOT_DO_BASIC
+  - name: BOOT_ACPI_EARLY_INIT
+  # initcall_harnesses
+  - name: DOINITCALLS_LEVEL_3
+  - name: DOINITCALLS_LEVEL_4
+  - name: DOINITCALLS_LEVEL_5
+  - name: DOINITCALLS_LEVEL_6
+  - name: DOINITCALLS_LEVEL_7
+  # bph_harnesses
+  - name: BPH_ACPI_INIT
+    kernel_params: fuzzing_func_harness=acpi_init
+  - name: BPH_VP_MODERN_PROBE
+    kernel_params: fuzzing_func_harness=vp_modern_probe fuzzing_disallow=virtio_pci_find_capability
+  - name: BPH_VIRTIO_CONSOLE_INIT
+    kernel_params: fuzzing_func_harness=virtio_console_init console=hvc0 console=hvc1 earlyprintk=hvc0
+  - name: BPH_P9_VIRTIO_PROBE
+    kernel_params: fuzzing_func_harness=p9_virtio_probe
+  - name: BPH_PCI_SUBSYS_INIT
+    kernel_params: fuzzing_func_harness=pci_subsys_init
+  - name: BPH_HANDLE_CONTROL_MESSAGE
+    kernel_params: fuzzing_func_harness=handle_control_message fuzzing_disallow=virtio_pci_find_capability,pci_read_config_dword console=hvc0
+  - name: BPH_VIRTIO_PCI_PROBE
+    kernel_params: fuzzing_func_harness=virtio_pci_probe
+    kafl_config:
+      abort_time: 4
+      timeout: 4
+      timeout_soft: 2
+      qemu_extra: -drive file=$BKC_ROOT/disk.img,if=none,id=fuzzdev -device virtio-blk-pci,drive=fuzzdev -device virtio-rng
+  - name: BPH_PCIBIOS_FIXUP_IRQS
+    kernel_params: fuzzing_func_harness=pcibios_fixup_irqs acpi=noirq
+  # user_harnesses
+  - name: US_DHCP
+  - name: US_RESUME_SUSPEND
+default_kafl_config:
+  abort_time: 2
+  trace: True
+  log_crashes: True
+  kickstart: 4
+default_tdxfuzz_kafl_config:
+  CONFIG_TDX_FUZZ_KAFL_DEBUGFS: n
+  CONFIG_TDX_FUZZ_KAFL_SKIP_ACPI_PIO: n
+  CONFIG_TDX_FUZZ_KAFL_SKIP_CPUID: y
+  CONFIG_TDX_FUZZ_KAFL_SKIP_IOAPIC_READS: n
+  CONFIG_TDX_FUZZ_KAFL_SKIP_MSR: n
+  CONFIG_TDX_FUZZ_KAFL_SKIP_PARAVIRT_REWRITE: n
+  CONFIG_TDX_FUZZ_KAFL_SKIP_RNG_SEEDING: y
+  CONFIG_TDX_FUZZ_KAFL_TRACE_LOCATIONS: n
+  CONFIG_TDX_FUZZ_KAFL_VIRTIO: y
+  CONFIG_TDX_FUZZ_KAFL_VIRTIO_GET_BUF: y
+  CONFIG_TDX_FUZZ_KAFL_DETERMINISTIC: y
+default_bph_options:
+  CONFIG_KPROBES: y
+  CONFIG_TDX_FUZZ_HARNESS_NONE: y
+default_us_options:
+  CONFIG_TDX_FUZZ_KAFL_DETERMINISTIC: n
+  CONFIG_TDX_FUZZ_KAFL_DEBUGFS: y
+  CONFIG_TDX_FUZZ_HARNESS_NONE: y
+harness_options:
+  BOOT_EARLYBOOT:
+    CONFIG_TDX_FUZZ_KAFL_SKIP_PARAVIRT_REWRITE: n
+  BOOT_FULL_BOOT:
+    CONFIG_TDX_FUZZ_KAFL_SKIP_PARAVIRT_REWRITE: y
+  BOOT_POST_TRAP:
+    CONFIG_TDX_FUZZ_KAFL_SKIP_ACPI_PIO: y
+    CONFIG_TDX_FUZZ_KAFL_SKIP_PARAVIRT_REWRITE: y
+  BOOT_DOINITCALLS_PCI:
+    CONFIG_TDX_FUZZ_KAFL_SKIP_ACPI_PIO: y
+  BOOT_START_KERNEL:
+    CONFIG_TDX_FUZZ_KAFL_SKIP_ACPI_PIO: y
+  US_RESUME_SUSPEND:
+    CONFIG_PM: y
+    CONFIG_PM_DEBUG: y
+    CONFIG_PM_ADVANCED_DEBUG: y
+    CONFIG_SUSPEND: y
+    CONFIG_HIBERNATION: y
+    CONFIG_PM_AUTOSLEEP: n
+    CONFIG_PM_WAKELOCKS: n
+    CONFIG_PM_TRACE_RTC: n
+    CONFIG_ACPI_TAD: n
+    CONFIG_FW_CACHE: y

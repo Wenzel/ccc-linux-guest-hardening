@@ -1,0 +1,212 @@
+name: Campaign
+
+# manual trigger
+on:
+  workflow_dispatch:
+    inputs:
+      harness_filter:
+        description: Pattern that matches one or more harness configurations
+        required: true
+        default: 'BPH'
+  pull_request:
+
+jobs:
+  build_ccc:
+    runs-on: self-hosted
+    outputs:
+      ccc_path: ${{ steps.prepare.outputs.ccc_path }}
+      campaign_dir: ${{ steps.set_campaign_dir.outputs.campaign_dir }}
+    steps:
+      - uses: actions/checkout@v3
+
+      - uses: actions/setup-python@v4
+        with:
+          python-version: '3.9'
+          cache: 'pip'
+
+      - name: Install make
+        run: sudo apt install -y make
+
+      - name: build
+        run: |
+          make deploy -- --skip-tags kernel,hardware_check,kvm_device
+
+      - name: prepare linux kernel
+        run: |
+          cp ../bkc/kafl/linux_kernel_tdx_guest.config .config
+          make olddefconfig
+          make -j $(nproc)
+        working-directory: linux-guest
+
+      # https://stackoverflow.com/a/39569568/3017219
+      # add linux-guest .git, needs for fuzz.sh
+      - name: Build archive
+        run: |
+          touch build.tar
+          tar --exclude-vcs -cf build.tar --exclude=build.tar .
+          tar -rf build.tar linux-guest/.git
+          gzip build.tar
+          du -h build.tar.gz
+
+      # TODO: make prepare
+      - run: |
+          make deploy -- --skip-tags kernel,guest,qemu
+          make sharedir initrd.cpio.gz disk.img initrd_busybox.cpio.gz
+          make smatch_warns_annotated.txt
+          
+      - id: prepare
+        name: Export values for fuzz jobs
+        run: |
+          echo "ccc_path=$PWD" >> $GITHUB_OUTPUT
+
+      - id: set_campaign_dir
+        name: Create campaign unique workdir
+        run: |
+          import os
+          import uuid
+
+          campaign_dir = f"{os.getcwd()}/campaign_{str(uuid.uuid4())}"
+          with open(os.environ['GITHUB_OUTPUT'], 'a') as o:
+            o.write(f"campaign_dir={campaign_dir}")
+        shell: python
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v3
+        with:
+          name: ccc_build
+          path: build.tar.gz
+
+  build_matrix:
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.set-matrix.outputs.matrix }}
+
+    steps:
+      - uses: actions/checkout@v3
+
+      - uses: actions/setup-python@v4
+        with:
+          python-version: '3.9'
+          cache: 'pip'
+      
+      - run: pip install pyyaml
+
+      - id: set-matrix
+        run: python .github/prepare_harness.py
+
+  fuzz:
+    runs-on: self-hosted
+    needs: [build_matrix, build_ccc]
+    env:
+      ccc_path: ${{ needs.build_ccc.outputs.ccc_path }}
+      campaign_dir: ${{ needs.build_ccc.outputs.campaign_dir }}
+    strategy:
+      matrix: ${{fromJson(needs.build_matrix.outputs.matrix)}}
+      max-parallel: 1
+    steps:
+      # ensure workspace is cleaned up
+      # (doesn't happen automatically on self-hosted runner, since it's not a fresh virtual machine)
+      - run: find . -mindepth 1 -delete
+
+      - name: install jq
+        run: sudo apt-get -y install jq
+
+      - name: Insert matrix into env
+        run: |
+          set -eux
+          DATA=$(echo '${{ toJson(matrix) }}' | jq -c '.')
+          echo "MATRIX=$DATA" >> $GITHUB_ENV
+
+      - uses: actions/setup-python@v4
+        with:
+          python-version: '3.9.13'
+    
+      - run: pip install pyyaml==6.0.1
+
+      - name: Create harness dir
+        run: |
+          echo "harness_dir=${{ env.campaign_dir }}/${{ matrix.name }}" >> $GITHUB_ENV
+          mkdir -p "${{ env.campaign_dir }}/${{ matrix.name }}"
+
+      - name: Setting Linux template
+        run: cp ${{ env.ccc_path }}/bkc/kafl/linux_kernel_tdx_guest.config linux.template
+        working-directory: ${{ env.harness_dir }}
+
+      - name: Setting Linux config
+        run: |
+          import os
+          import json
+          from pprint import pprint
+
+          matrix_json = os.environ['MATRIX']
+          matrix = json.loads(matrix_json)
+          with open('linux.config', 'w') as f:
+            for key, value in matrix['kernel_config'].items():
+              f.write(f"{key}={value}\n")
+        shell: python
+        working-directory: ${{ env.harness_dir }}
+
+      - name: create sharedir (if required)
+        run: |
+          cp -r ${{ env.ccc_path }}/sharedir sharedir
+          cp ${{ env.ccc_path }}/bkc/kafl/userspace/harnesses/${{ matrix.name }}.sh sharedir/init.sh
+        working-directory: ${{ env.harness_dir }}
+        if: startsWith( matrix.name , 'US_')
+
+      - name: Create kafl.yml
+        run: |
+          import os
+          import json
+          import yaml
+          from pprint import pprint
+
+          matrix_json = os.environ['MATRIX']
+          matrix = json.loads(matrix_json)
+          # dump kafl_config
+          with open('kafl.yml', 'w') as f:
+            pprint(matrix, indent=4)
+            yaml.dump(matrix['kernel_config'], f)
+        shell: python
+        working-directory: ${{ env.harness_dir }}
+
+      - name: add sharedir to kafl.yml (if required)
+        run: |
+          echo "sharedir: $PWD/sharedir" >> kafl.yml
+        working-directory: ${{ env.harness_dir }}
+        if: startsWith( matrix.name , 'US_')
+
+      - name: Download build artefact
+        uses: actions/download-artifact@v3
+        with:
+          name: ccc_build
+
+      - name: Extract archive
+        run: |
+          tar -xf build.tar.gz
+          rm build.tar.gz
+
+      - name: test matrix
+        run: echo "name ${{ matrix.name }}, ${{ matrix.kernel_params }}", ${{ matrix.kernel_config }}
+
+      # ./scripts/config --enable ${{ matrix.name }}
+      # hardcode virtio for now
+      - name: Prepare kernel config
+        run: |
+          ./scripts/config --enable CONFIG_TDX_FUZZ_KAFL
+          ./scripts/config --enable CONFIG_TDX_FUZZ_HARNESS_DOINITCALLS_VIRTIO
+        working-directory: linux-guest
+
+      - name: Build kernel
+        run: |
+          make -j $(nproc)
+        working-directory: linux-guest
+        env:
+          KCFLAGS: '-fno-ipa-sra -fno-ipa-cp-clone -fno-ipa-cp'
+
+      - name: Run fuzzing
+        run: |
+          source env.sh
+          ln -sf /boot/initrd.img initrd.cpio.gz
+          timeout 1h $BKC_ROOT/bkc/kafl/fuzz.sh full linux-guest -t 2 -ts 1 -p $(nproc) --log-hprintf $KAFL_EXTRA_FLAGS
+        # TODO: this is not working
+          # WORKDIR_PATH: $RUNNER_TEMP
