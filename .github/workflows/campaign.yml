@@ -19,9 +19,12 @@ jobs:
     steps:
       - uses: actions/checkout@v3
 
+      - name: Ensure python dev is installed
+        run: sudo apt install -y python-dev
+
       - uses: actions/setup-python@v4
         with:
-          python-version: '3.9'
+          python-version: '3.11'
           cache: 'pip'
 
       - name: Install make
@@ -87,7 +90,7 @@ jobs:
 
       - uses: actions/setup-python@v4
         with:
-          python-version: '3.9'
+          python-version: '3.11'
           cache: 'pip'
       
       - run: pip install pyyaml
@@ -120,7 +123,7 @@ jobs:
 
       - uses: actions/setup-python@v4
         with:
-          python-version: '3.9'
+          python-version: '3.11'
     
       - run: pip install pyyaml
 
