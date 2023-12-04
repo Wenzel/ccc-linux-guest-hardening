@@ -27,26 +27,26 @@ jobs:
       - name: Install make
         run: sudo apt install -y make
 
-      # - name: build
-      #   run: |
-      #     make deploy -- --skip-tags kernel,hardware_check,kvm_device
+      - name: build
+        run: |
+          make deploy -- --skip-tags kernel,hardware_check,kvm_device
 
-      # - name: prepare linux kernel
-      #   run: |
-      #     cp ../bkc/kafl/linux_kernel_tdx_guest.config .config
-      #     make olddefconfig
-      #     make -j $(nproc)
-      #   working-directory: linux-guest
+      - name: prepare linux kernel
+        run: |
+          cp ../bkc/kafl/linux_kernel_tdx_guest.config .config
+          make olddefconfig
+          make -j $(nproc)
+        working-directory: linux-guest
 
-      # # https://stackoverflow.com/a/39569568/3017219
-      # # add linux-guest .git, needs for fuzz.sh
-      # - name: Build archive
-      #   run: |
-      #     touch build.tar
-      #     tar --exclude-vcs -cf build.tar --exclude=build.tar .
-      #     tar -rf build.tar linux-guest/.git
-      #     gzip build.tar
-      #     du -h build.tar.gz
+      # https://stackoverflow.com/a/39569568/3017219
+      # add linux-guest .git, needs for fuzz.sh
+      - name: Build archive
+        run: |
+          touch build.tar
+          tar --exclude-vcs -cf build.tar --exclude=build.tar .
+          tar -rf build.tar linux-guest/.git
+          gzip build.tar
+          du -h build.tar.gz
 
       # TODO: make prepare
       - run: |
@@ -70,14 +70,14 @@ jobs:
             o.write(f"campaign_dir={campaign_dir}")
         shell: python
 
-      # - name: Upload build artifact
-      #   uses: actions/upload-artifact@v3
-      #   with:
-      #     name: ccc_build
-      #     path: build.tar.gz
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v3
+        with:
+          name: ccc_build
+          path: build.tar.gz
 
   build_matrix:
-    # needs: [build_project]
+    needs: [build_project]
     runs-on: ubuntu-latest
     outputs:
       matrix: ${{ steps.set-matrix.outputs.matrix }}
@@ -107,7 +107,7 @@ jobs:
     steps:
       # ensure workspace is cleaned up
       # (doesn't happen automatically on self-hosted runner, since it's not a fresh virtual machine)
-      # - run: find . -mindepth 1 -delete
+      - run: find . -mindepth 1 -delete
 
       - name: install jq
         run: sudo apt-get -y install jq
@@ -176,38 +176,38 @@ jobs:
         working-directory: ${{ env.harness_dir }}
         if: startsWith( matrix.name , 'US_')
 
-      # - name: Download build artefact
-      #   uses: actions/download-artifact@v3
-      #   with:
-      #     name: ccc_build
+      - name: Download build artefact
+        uses: actions/download-artifact@v3
+        with:
+          name: ccc_build
 
-      # - name: Extract archive
-      #   run: |
-      #     tar -xf build.tar.gz
-      #     rm build.tar.gz
+      - name: Extract archive
+        run: |
+          tar -xf build.tar.gz
+          rm build.tar.gz
 
       - name: test matrix
         run: echo "name ${{ matrix.name }}, ${{ matrix.kernel_params }}", ${{ matrix.kernel_config }}
 
       # ./scripts/config --enable ${{ matrix.name }}
       # hardcode virtio for now
-      # - name: Prepare kernel config
-      #   run: |
-      #     ./scripts/config --enable CONFIG_TDX_FUZZ_KAFL
-      #     ./scripts/config --enable CONFIG_TDX_FUZZ_HARNESS_DOINITCALLS_VIRTIO
-      #   working-directory: linux-guest
+      - name: Prepare kernel config
+        run: |
+          ./scripts/config --enable CONFIG_TDX_FUZZ_KAFL
+          ./scripts/config --enable CONFIG_TDX_FUZZ_HARNESS_DOINITCALLS_VIRTIO
+        working-directory: linux-guest
 
-      # - name: Build kernel
-      #   run: |
-      #     make -j $(nproc)
-      #   working-directory: linux-guest
-      #   env:
-      #     KCFLAGS: '-fno-ipa-sra -fno-ipa-cp-clone -fno-ipa-cp'
+      - name: Build kernel
+        run: |
+          make -j $(nproc)
+        working-directory: linux-guest
+        env:
+          KCFLAGS: '-fno-ipa-sra -fno-ipa-cp-clone -fno-ipa-cp'
 
-      # - name: Run fuzzing
-      #   run: |
-      #     source env.sh
-      #     ln -sf /boot/initrd.img initrd.cpio.gz
-      #     timeout 1h $BKC_ROOT/bkc/kafl/fuzz.sh full linux-guest -t 2 -ts 1 -p $(nproc) --log-hprintf $KAFL_EXTRA_FLAGS
+      - name: Run fuzzing
+        run: |
+          source env.sh
+          ln -sf /boot/initrd.img initrd.cpio.gz
+          timeout 1h $BKC_ROOT/bkc/kafl/fuzz.sh full linux-guest -t 2 -ts 1 -p $(nproc) --log-hprintf $KAFL_EXTRA_FLAGS
         # TODO: this is not working
           # WORKDIR_PATH: $RUNNER_TEMP
