@@ -167,6 +167,7 @@ jobs:
           with open('kafl.yml', 'w') as f:
             pprint(matrix, indent=4)
             # yaml.dump(f, matrix['kernel_config'])
+            json.dump(matrix['kafl_config'], f)
         shell: python
         working-directory: ${{ env.harness_dir }}
 
